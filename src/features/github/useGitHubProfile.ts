@@ -1,14 +1,18 @@
 import {
     useCallback,
     useEffect,
+    useReducer,
     useRef,
-    useState,
   } from "react";
   import {
     getGitHubProfile,
     getGitHubRepositories,
   } from "./api/githubClient";
   import { getErrorMessage } from "./getErrorMessage";
+  import {
+    githubProfileReducer,
+    initialGitHubProfileState,
+  } from "./githubProfileReducer";
   import type { GitHubProfileState } from "./githubProfileState";
   
   interface UseGitHubProfileResult {
@@ -17,11 +21,12 @@ import {
     isLoading: boolean;
   }
   
-  export function useGitHubProfile(): UseGitHubProfileResult {
-    const [state, setState] =
-      useState<GitHubProfileState>({
-        status: "idle",
-      });
+  export function useGitHubProfile():
+    UseGitHubProfileResult {
+    const [state, dispatch] = useReducer(
+      githubProfileReducer,
+      initialGitHubProfileState,
+    );
   
     const activeRequestRef =
       useRef<AbortController | null>(null);
@@ -39,7 +44,9 @@ import {
         const requestController = new AbortController();
         activeRequestRef.current = requestController;
   
-        setState({ status: "loading" });
+        dispatch({
+          type: "searchStarted",
+        });
   
         try {
           const [profile, repositories] = await Promise.all([
@@ -59,8 +66,8 @@ import {
             return;
           }
   
-          setState({
-            status: "success",
+          dispatch({
+            type: "searchSucceeded",
             profile,
             repositories,
           });
@@ -79,8 +86,8 @@ import {
             return;
           }
   
-          setState({
-            status: "error",
+          dispatch({
+            type: "searchFailed",
             message: getErrorMessage(error),
           });
         } finally {
@@ -102,35 +109,3 @@ import {
       isLoading,
     };
   }
-
-
-  /*
-Notes: 
-Sequential operations
-      
-const profile = await getGitHubProfile(username);
-const repositories = await getGitHubRepositories(username);
-
-Concurrent operations
-we use concurrent execution when the operations are independent:
-
-
-Promise.all
-
-Promise<GitHubProfile> ───────────────┐
-                                      ├── Promise<[profile, repositories]>
-Promise<GitHubRepository[]> ──────────┘
-
-
-Race condition:
-Multiple asynchronous operations compete to update the same state, and the result depends on which operation finishes last.
-
-
-A ref:
-
-Survives between renders.
-Stores a mutable value in .current.
-Does not trigger a render when changed.
-Is suitable for controllers, timers, DOM elements, and similar imperative objects.
-
-*/
